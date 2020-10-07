@@ -201,6 +201,25 @@ class MiniDumpUUIDTestCase(TestBase):
         # will check that this matches.
         self.verify_module(modules[0], so_path, "D9C480E8")
 
+    def test_breakpad_hash_match_sysroot(self):
+        """
+            Check that we can match the breakpad .text section hash when the
+            module is located under a user-provided sysroot.
+        """
+        sysroot_path = os.path.join(self.getBuildDir(), "mock_sysroot")
+        # Create the directory under the sysroot where the minidump reports
+        # the module.
+        so_dir = os.path.join(sysroot_path, "invalid", "path", "on", "current", "system")
+        so_path = os.path.join(so_dir, "libbreakpad.so")
+        lldbutil.mkdir_p(so_dir)
+        self.yaml2obj("libbreakpad.yaml", so_path)
+        self.runCmd("platform select remote-linux --sysroot '%s'" % sysroot_path)
+        modules = self.get_minidump_modules("linux-arm-breakpad-uuid-match.yaml")
+        self.assertEqual(1, len(modules))
+        # LLDB makes up its own UUID as well when there is no build ID so we
+        # will check that this matches.
+        self.verify_module(modules[0], so_path, "D9C480E8")
+
     def test_breakpad_overflow_hash_match(self):
         """
             This is a similar to test_breakpad_hash_match, but it verifies that

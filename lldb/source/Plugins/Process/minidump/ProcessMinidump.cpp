@@ -523,9 +523,13 @@ void ProcessMinidump::ReadModuleList() {
       // directories that contain executables that can be searched for matches.
       ModuleSpec basename_module_spec(module_spec);
       basename_module_spec.GetUUID().Clear();
-      basename_module_spec.GetFileSpec().GetDirectory().Clear();
       module_sp = GetTarget().GetOrCreateModule(basename_module_spec,
                                                 true /* notify */, &error);
+      if (!module_sp) {
+        basename_module_spec.GetFileSpec().GetDirectory().Clear();
+        module_sp = GetTarget().GetOrCreateModule(basename_module_spec,
+                                                  true /* notify */, &error);
+      }
       if (module_sp) {
         // We consider the module to be a match if the minidump UUID is a
         // prefix of the actual UUID, or if either of the UUIDs are empty.

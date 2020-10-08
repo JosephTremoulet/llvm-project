@@ -224,7 +224,7 @@ class MiniDumpUUIDTestCase(TestBase):
         self.assertEqual(1, len(modules))
         # LLDB makes up its own UUID as well when there is no build ID so we
         # will check that this matches.
-        self.verify_module(modules[0], so_path, "D9C480E8")
+        self.verify_module(modules[0], so_path, "D9C480E8", True)
 
     def test_breakpad_overflow_hash_match(self):
         """
@@ -261,7 +261,7 @@ class MiniDumpUUIDTestCase(TestBase):
         self.assertEqual(1, len(modules))
         # LLDB makes up its own UUID as well when there is no build ID so we
         # will check that this matches.
-        self.verify_module(modules[0], so_path, "D9C480E8", True)
+        self.verify_module(modules[0], so_path, "D9C480E8")
 
     def test_facebook_hash_match(self):
         """

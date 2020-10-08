@@ -19,18 +19,20 @@ class MiniDumpUUIDTestCase(TestBase):
 
     NO_DEBUG_INFO_TESTCASE = True
 
-    def verify_module(self, module, verify_path, verify_uuid):
+    def verify_module(self, module, verify_path, verify_uuid, do_norm = False):
         # Compare the filename and the directory separately. We are avoiding
         # SBFileSpec.fullpath because it causes a slash/backslash confusion
-        # on Windows.  Similarly, we compare the directories using normcase
-        # because they may contain a Linux-style relative path from the
-        # minidump appended to a Windows-style root path from the host.
+        # on Windows.
         self.maxDiff = None
         self.assertEqual(
             os.path.basename(verify_path), module.GetFileSpec().basename)
-        self.assertEqual(
-            os.path.normcase(os.path.dirname(verify_path)),
-            os.path.normcase(module.GetFileSpec().dirname or ""))
+        if (do_norm):
+            self.assertEqual(
+                os.path.normcase(os.path.dirname(verify_path)),
+                os.path.normcase(module.GetFileSpec().dirname or ""))
+        else:
+            self.assertEqual(
+                os.path.dirname(verify_path), module.GetFileSpec().dirname or "")
         self.assertEqual(verify_uuid, module.GetUUIDString())
 
     def get_minidump_modules(self, yaml_file, exe = None):
@@ -259,7 +261,7 @@ class MiniDumpUUIDTestCase(TestBase):
         self.assertEqual(1, len(modules))
         # LLDB makes up its own UUID as well when there is no build ID so we
         # will check that this matches.
-        self.verify_module(modules[0], so_path, "D9C480E8")
+        self.verify_module(modules[0], so_path, "D9C480E8", True)
 
     def test_facebook_hash_match(self):
         """

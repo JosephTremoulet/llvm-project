@@ -2085,18 +2085,30 @@ ModuleSP Target::GetOrCreateModule(const ModuleSpec &module_spec, bool notify,
         if (GetPreloadSymbols())
           module_sp->PreloadSymbols();
 
-        if (old_modules.size() > 1) {
-          // The same new module replaces multiple old modules
+        llvm::SmallVector<ModuleSP, 1> replaced_modules;
+        for (ModuleSP &old_module_sp : old_modules) {
+          if (m_images.GetIndexForModule(old_module_sp.get()) !=
+              LLDB_INVALID_INDEX32) {
+            if (replaced_modules.empty())
+              m_images.ReplaceModule(old_module_sp, module_sp);
+            else
+              m_images.Remove(old_module_sp);
+
+            replaced_modules.push_back(std::move(old_module_sp));
+          }
+        }
+
+        if (replaced_modules.size() > 1) {
+          // The same new module replaced multiple old modules
           // simultaneously.  It's not clear this should ever
           // happen (if we always replace old modules as we add
           // new ones, presumably we should never have more than
           // one old one).  If there are legitimate cases where
           // this happens, then the ModuleList::Notifier interface
           // may need to be adjusted to allow reporting this.
-          // In the meantime, just log that this is happening,
-          // call ReplaceModule on the first one, and RemoveModule
+          // In the meantime, just log that this has happened; just
+          // above we called ReplaceModule on the first one, and Remove
           // on the rest.
-          //
           if (Log *log = GetLogIfAnyCategoriesSet(LIBLLDB_LOG_TARGET |
                                                   LIBLLDB_LOG_MODULES)) {
             StreamString message;
@@ -2118,32 +2130,23 @@ ModuleSP Target::GetOrCreateModule(const ModuleSpec &module_spec, bool notify,
             message << "New module ";
             dump(*module_sp);
             message.AsRawOstream()
-                << llvm::formatv(" simultaneously replacing {0} old modules: ",
-                                 old_modules.size());
-            for (ModuleSP &old_module : old_modules)
-              dump(*old_module);
+                << llvm::formatv(" simultaneously replaced {0} old modules: ",
+                                 replaced_modules.size());
+            for (ModuleSP &replaced_module_sp : replaced_modules)
+              dump(*replaced_module_sp);
 
             log->PutString(message.GetString());
           }
         }
-        bool did_replace = false;
-        for (ModuleSP &old_module_sp : old_modules) {
-          if (m_images.GetIndexForModule(old_module_sp.get()) !=
-              LLDB_INVALID_INDEX32) {
-            if (!did_replace) {
-              m_images.ReplaceModule(old_module_sp, module_sp);
-              did_replace = true;
-            } else
-              m_images.Remove(old_module_sp);
 
-            Module *old_module_ptr = old_module_sp.get();
-            old_module_sp.reset();
-            ModuleList::RemoveSharedModuleIfOrphaned(old_module_ptr);
-          }
-        }
-
-        if (!did_replace)
+        if (replaced_modules.empty())
           m_images.Append(module_sp, notify);
+
+        for (ModuleSP &old_module_sp : replaced_modules) {
+          Module *old_module_ptr = old_module_sp.get();
+          old_module_sp.reset();
+          ModuleList::RemoveSharedModuleIfOrphaned(old_module_ptr);
+        }
       } else
         module_sp.reset();
     }

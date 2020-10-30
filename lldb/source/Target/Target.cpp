@@ -2085,6 +2085,47 @@ ModuleSP Target::GetOrCreateModule(const ModuleSpec &module_spec, bool notify,
         if (GetPreloadSymbols())
           module_sp->PreloadSymbols();
 
+        if (old_modules.size() > 1) {
+          // The same new module replaces multiple old modules
+          // simultaneously.  It's not clear this should ever
+          // happen (if we always replace old modules as we add
+          // new ones, presumably we should never have more than
+          // one old one).  If there are legitimate cases where
+          // this happens, then the ModuleList::Notifier interface
+          // may need to be adjusted to allow reporting this.
+          // In the meantime, just log that this is happening,
+          // call ReplaceModule on the first one, and RemoveModule
+          // on the rest.
+          //
+          if (Log *log = GetLogIfAnyCategoriesSet(LIBLLDB_LOG_TARGET |
+                                                  LIBLLDB_LOG_MODULES)) {
+            StreamString message;
+            auto dump = [&message](Module &dump_module) -> void {
+              UUID dump_uuid = dump_module.GetUUID();
+
+              message << '[';
+              dump_module.GetDescription(message.AsRawOstream());
+              message << " (uuid ";
+
+              if (dump_uuid.IsValid())
+                dump_uuid.Dump(&message);
+              else
+                message << "not specified";
+
+              message << ")]";
+            };
+
+            message << "New module ";
+            dump(*module_sp);
+            message.AsRawOstream()
+                << llvm::formatv(" simultaneously replacing {0} old modules: ",
+                                 old_modules.size());
+            for (ModuleSP &old_module : old_modules)
+              dump(*old_module);
+
+            log->PutString(message.GetString());
+          }
+        }
         bool did_replace = false;
         for (ModuleSP &old_module_sp : old_modules) {
           if (m_images.GetIndexForModule(old_module_sp.get()) !=
@@ -2092,21 +2133,12 @@ ModuleSP Target::GetOrCreateModule(const ModuleSpec &module_spec, bool notify,
             if (!did_replace) {
               m_images.ReplaceModule(old_module_sp, module_sp);
               did_replace = true;
-            } else {
-              LLDB_LOGF(
-                  GetLogIfAnyCategoriesSet(LIBLLDB_LOG_TARGET |
-                                           LIBLLDB_LOG_MODULES),
-                  "Target discarding module %p '%s' due to multiple redundancy",
-                  static_cast<void *>(old_module_sp.get()),
-                  old_module_sp->GetFileSpec().GetFilename().GetCString());
-
+            } else
               m_images.Remove(old_module_sp);
-            }
 
             Module *old_module_ptr = old_module_sp.get();
             old_module_sp.reset();
             ModuleList::RemoveSharedModuleIfOrphaned(old_module_ptr);
-            did_replace = true;
           }
         }
 
